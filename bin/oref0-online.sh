@@ -20,10 +20,16 @@ main() {
         # if we are back on normal wifi (and have connectivity to checkip.amazonaws.com), shut down bluetooth
         stop_hotspot
         if has_addr wlan0 && has_addr bnep0; then
+            # if online but still configured with hotspot IP, cycle wlan0
             if has_addr wlan0 | grep $HostAPDIP; then
                 ifdown wlan0; ifup wlan0
+            # if online via BT, cycle wlan0
+            elif ! has_addr wlan0; then
+                ifdown wlan0; ifup wlan0
+            # if online via wifi, disconnect BT
             else
                 bt_disconnect $MACs
+                wifi_dhcp_renew
             fi
         fi
     else
@@ -43,8 +49,6 @@ main() {
             start_hotspot $@
             # don't disconnect bluetooth when starting local-only hotspot
             #bt_disconnect $MACs
-            # if we still can't get online, try cycling networking as a last resort
-            #restart_networking
         fi
     fi
     echo Finished oref0-online.
@@ -134,11 +138,22 @@ function start_hotspot {
         echo "No BT MAC provided: not activating local-only hotspot"
         echo "Cycling wlan0"
         ifdown wlan0; ifup wlan0
+    elif ! ls preferences.json 2>/dev/null >/dev/null \
+        || ! cat preferences.json | jq -e .offline_hotspot >/dev/null; then
+        echo "Offline hotspot not enabled in preferences.json"
+        stop_hotspot
+        echo "Cycling wlan0"
+        ifdown wlan0; ifup wlan0
     elif grep -q $HostAPDIP /etc/network/interfaces; then
         echo "Local hotspot is running."
         service hostapd status > /dev/null || service hostapd restart
         service dnsmasq status > /dev/null || service dnsmasq restart
-    elif cat preferences.json | jq -e .offline_hotspot; then
+    elif ! ls /etc/network/interfaces.ap 2>/dev/null >/dev/null; then
+        echo "Local-only hotspot not configured"
+        stop_hotspot
+        echo "Cycling wlan0"
+        ifdown wlan0; ifup wlan0
+    else
         echo "Unable to connect via wifi or Bluetooth; activating local-only hotspot"
         echo "Killing wpa_supplicant"
         #killall wpa_supplicant
@@ -161,8 +176,6 @@ function start_hotspot {
         sleep 5
         echo "Setting IP Address for wlan0"
         /sbin/ifconfig wlan0 $HostAPDIP netmask 255.255.255.0 up
-    else
-        echo "Offline hotspot not enabled in preferences.json"
     fi
 }
 
