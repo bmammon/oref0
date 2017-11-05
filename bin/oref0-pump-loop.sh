@@ -456,12 +456,13 @@ function gather {
     && ( grep -q "model.*12" monitor/status.json || \
          test $(cat monitor/status.json | json suspended) == true || \
          test $(cat monitor/status.json | json bolusing) == false ) \
-    && echo -n resh \
+         || (echo cat monitor/status.json | jq -C .; fail "$@")
+    echo -n resh \
     && monitor_pump \
     && echo -n ed \
     && merge_pumphistory \
     && echo -n " pumphistory" \
-    && oref0-meal monitor/pumphistory-merged.json settings/profile.json monitor/clock-zoned.json monitor/glucose.json settings/basal_profile.json monitor/carbhistory.json > monitor/meal.json 2>&1 | tail -1 \
+    && oref0-meal monitor/pumphistory-merged.json settings/profile.json monitor/clock-zoned.json monitor/glucose.json settings/basal_profile.json monitor/carbhistory.json > monitor/meal.json \
     && echo " and meal.json" \
     || (echo; exit 1) 2>/dev/null
 }
